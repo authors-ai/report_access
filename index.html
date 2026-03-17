@@ -202,15 +202,22 @@
       text-transform: uppercase;
       color: #fff;
       background: #1e40af;
-      padding: 11px 16px;
+      padding: 0;
       text-align: left;
       border-bottom: 2px solid #1d3fb0;
       position: sticky;
       top: 0;
       z-index: 2;
     }
+    .th-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding: 11px 16px;
+      min-height: 100%;
+    }
     .th-label {
-      display: block;
+      flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -396,13 +403,16 @@
     keys.forEach(k => {
       const th = document.createElement('th');
       th.style.width = '180px';
+      const wrap = document.createElement('div');
+      wrap.className = 'th-wrap';
       const label = document.createElement('span');
       label.className = 'th-label';
       label.textContent = k;
-      th.appendChild(label);
+      wrap.appendChild(label);
       const handle = document.createElement('div');
       handle.className = 'col-resize-handle';
-      th.appendChild(handle);
+      wrap.appendChild(handle);
+      th.appendChild(wrap);
       hr.appendChild(th);
     });
     table.style.width = (keys.length * 180) + 'px';
