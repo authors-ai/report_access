@@ -188,13 +188,10 @@
     #table-wrap { flex: 1; overflow: auto; padding: 16px; overflow-x: auto; }
 
     table {
-      width: max-content;
-      min-width: 100%;
       border-collapse: collapse;
       font-size: .8rem;
       background: var(--surface);
       border-radius: 8px;
-      overflow: hidden;
       box-shadow: 0 1px 4px rgba(0,0,0,.07);
       table-layout: fixed;
     }
@@ -210,25 +207,31 @@
       border-bottom: 2px solid #1d3fb0;
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: 2;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .th-inner {
+      display: flex;
+      align-items: center;
       position: relative;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .col-resize-handle {
       position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 5px;
+      right: -16px;
+      top: -11px;
+      bottom: -13px;
+      width: 7px;
       cursor: col-resize;
       background: transparent;
-      z-index: 2;
+      z-index: 10;
     }
     .col-resize-handle:hover,
     .col-resize-handle.active {
-      background: rgba(255,255,255,.35);
+      background: rgba(255,255,255,.4);
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
     tbody tr:last-child { border-bottom: none; }
@@ -395,13 +398,17 @@
     const hr = thead.insertRow();
     keys.forEach(k => {
       const th = document.createElement('th');
-      th.textContent = k;
       th.style.width = '180px';
+      const inner = document.createElement('div');
+      inner.className = 'th-inner';
+      inner.textContent = k;
       const handle = document.createElement('div');
       handle.className = 'col-resize-handle';
-      th.appendChild(handle);
+      inner.appendChild(handle);
+      th.appendChild(inner);
       hr.appendChild(th);
     });
+    table.style.width = (keys.length * 180) + 'px';
     const tbody = table.createTBody();
     rows.forEach(row => {
       const tr = tbody.insertRow();
@@ -463,12 +470,13 @@
 
   /* Column resize logic */
   (function() {
-    let activeHandle = null, startX = 0, startW = 0, th = null;
+    let activeHandle = null, startX = 0, startW = 0, th = null, tbl = null;
     document.addEventListener('mousedown', e => {
       if (!e.target.classList.contains('col-resize-handle')) return;
       activeHandle = e.target;
       activeHandle.classList.add('active');
-      th = activeHandle.parentElement;
+      th = e.target.closest('th');
+      tbl = th.closest('table');
       startX = e.pageX;
       startW = th.offsetWidth;
       document.body.style.cursor = 'col-resize';
@@ -477,14 +485,18 @@
     });
     document.addEventListener('mousemove', e => {
       if (!activeHandle) return;
-      const w = Math.max(60, startW + (e.pageX - startX));
-      th.style.width = w + 'px';
+      const diff = e.pageX - startX;
+      const newW = Math.max(60, startW + diff);
+      const delta = newW - th.offsetWidth;
+      th.style.width = newW + 'px';
+      tbl.style.width = (tbl.offsetWidth + delta) + 'px';
     });
     document.addEventListener('mouseup', () => {
       if (!activeHandle) return;
       activeHandle.classList.remove('active');
       activeHandle = null;
       th = null;
+      tbl = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     });
