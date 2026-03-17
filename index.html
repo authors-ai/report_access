@@ -357,6 +357,8 @@
     if (!baseUrl || !apiKey) { showError('Please enter both an API URL and API Key.'); return; }
 
     const params = new URLSearchParams();
+    params.set('flatten', 'true');
+    params.set('columns', 'email,name,type,description,createdAt,deletedAt,owner,titleId,versionId');
     const v = id => document.getElementById(id).value.trim();
     if (v('f-versionId'))     params.set('versionId',       v('f-versionId'));
     if (v('f-titleId'))       params.set('titleId',          v('f-titleId'));
