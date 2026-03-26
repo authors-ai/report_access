@@ -348,35 +348,60 @@
   keyInput.addEventListener('change', () => localStorage.setItem('marlowe_key', keyInput.value.trim()));
 
   let lastResults = [];
+  const BATCH_SIZE = 500;
+  const DISPLAY_LIMIT = 100;
 
   document.getElementById('btn-run').addEventListener('click', runQuery);
 
   async function runQuery() {
+    const btn = document.getElementById('btn-run');
+    if (btn.disabled) return;
+    btn.disabled = true;
+
     const baseUrl = urlInput.value.trim().replace(/\/$/, '');
     const apiKey  = keyInput.value.trim();
-    if (!baseUrl || !apiKey) { showError('Please enter both an API URL and API Key.'); return; }
+    if (!baseUrl || !apiKey) { showError('Please enter both an API URL and API Key.'); btn.disabled = false; return; }
 
-    const params = new URLSearchParams();
-    params.set('flatten', 'true');
-    params.set('columns', 'email,name,type,description,createdAt,deletedAt,owner,titleId,versionId');
+    const totalLimit = parseInt(document.getElementById('f-limit').value.trim()) || 100;
+
+    const baseParams = new URLSearchParams();
+    baseParams.set('flatten', 'true');
+    baseParams.set('columns', 'email,name,type,description,createdAt,deletedAt,owner,titleId,versionId');
     const v = id => document.getElementById(id).value.trim();
-    if (v('f-versionId'))     params.set('versionId',       v('f-versionId'));
-    if (v('f-titleId'))       params.set('titleId',          v('f-titleId'));
-    if (v('f-email'))         params.set('properties.email', v('f-email'));
-    if (v('f-createdAtFrom')) params.set('createdAtFrom',    v('f-createdAtFrom'));
-    if (v('f-createdAtTo'))   params.set('createdAtTo',      v('f-createdAtTo'));
-    if (v('f-limit'))         params.set('limit',            v('f-limit'));
+    if (v('f-versionId'))     baseParams.set('versionId',       v('f-versionId'));
+    if (v('f-titleId'))       baseParams.set('titleId',          v('f-titleId'));
+    if (v('f-email'))         baseParams.set('properties.email', v('f-email'));
+    if (v('f-createdAtFrom')) baseParams.set('createdAtFrom',    v('f-createdAtFrom'));
+    if (v('f-createdAtTo'))   baseParams.set('createdAtTo',      v('f-createdAtTo'));
 
     setStatus('loading');
     hideError();
 
     try {
-      const res = await fetch(`${baseUrl}/versions?${params.toString()}`, { headers: { 'x-api-key': apiKey } });
-      if (res.status === 401) throw new Error('Unauthorized — check your API key.');
-      if (!res.ok) throw new Error(`Server error: ${res.status} ${res.statusText}`);
-      const data = await res.json();
-      lastResults = Array.isArray(data) ? data : [];
-      renderTable(lastResults);
+      lastResults = [];
+      let skip = 0;
+
+      while (lastResults.length < totalLimit) {
+        const batchLimit = Math.min(BATCH_SIZE, totalLimit - lastResults.length);
+        const params = new URLSearchParams(baseParams);
+        params.set('limit', batchLimit);
+        params.set('skip', skip);
+
+        setStatus('loading', `fetching… ${lastResults.length} of ${totalLimit}`);
+
+        const res = await fetch(`${baseUrl}/versions?${params.toString()}`, { headers: { 'x-api-key': apiKey } });
+        if (res.status === 401) throw new Error('Unauthorized — check your API key.');
+        if (!res.ok) throw new Error(`Server error: ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        const batch = Array.isArray(data) ? data : [];
+
+        lastResults = lastResults.concat(batch);
+        skip += batch.length;
+
+        if (batch.length < batchLimit) break;
+      }
+
+      renderTable(lastResults.slice(0, DISPLAY_LIMIT));
       setStatus('ok', lastResults.length);
     } catch (err) {
       showError(err.message);
@@ -405,16 +430,16 @@
     keys.forEach(k => {
       const th = document.createElement('th');
       th.style.width = '180px';
-      const wrap = document.createElement('div');
-      wrap.className = 'th-wrap';
+      const thWrap = document.createElement('div');
+      thWrap.className = 'th-wrap';
       const label = document.createElement('span');
       label.className = 'th-label';
       label.textContent = k;
-      wrap.appendChild(label);
+      thWrap.appendChild(label);
       const handle = document.createElement('div');
       handle.className = 'col-resize-handle';
-      wrap.appendChild(handle);
-      th.appendChild(wrap);
+      thWrap.appendChild(handle);
+      th.appendChild(thWrap);
       hr.appendChild(th);
     });
     table.style.width = (keys.length * 180) + 'px';
@@ -433,7 +458,12 @@
     wrap.style.display = 'block';
     empty.style.display = 'none';
     exportBtn.disabled = false;
-    rowCount.textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''}`;
+    const total = lastResults.length;
+    if (total > rows.length) {
+      rowCount.textContent = `showing ${rows.length} of ${total} rows`;
+    } else {
+      rowCount.textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''}`;
+    }
   }
 
   document.getElementById('btn-export').addEventListener('click', () => {
@@ -450,6 +480,7 @@
     a.href = URL.createObjectURL(blob);
     a.download = `marlowe-export-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
   document.getElementById('btn-clear').addEventListener('click', () => {
@@ -457,12 +488,25 @@
     document.getElementById('f-limit').value = '100';
   });
 
-  function setStatus(state, count) {
+  function setStatus(state, info) {
     const badge = document.getElementById('status-badge');
     const btn = document.getElementById('btn-run');
-    if (state === 'loading') { badge.textContent = '● querying…'; badge.className = ''; btn.innerHTML = '<span class="spinner"></span>Running…'; btn.disabled = true; }
-    else if (state === 'ok') { badge.textContent = `● ${count} rows returned`; badge.className = 'ok'; btn.textContent = 'Run Query'; btn.disabled = false; }
-    else { badge.textContent = '● error'; badge.className = 'err'; btn.textContent = 'Run Query'; btn.disabled = false; }
+    if (state === 'loading') {
+      badge.textContent = info ? `● ${info}` : '● querying…';
+      badge.className = '';
+      btn.innerHTML = '<span class="spinner"></span>Running…';
+      btn.disabled = true;
+    } else if (state === 'ok') {
+      badge.textContent = `● ${info} rows fetched`;
+      badge.className = 'ok';
+      btn.textContent = 'Run Query';
+      btn.disabled = false;
+    } else {
+      badge.textContent = '● error';
+      badge.className = 'err';
+      btn.textContent = 'Run Query';
+      btn.disabled = false;
+    }
   }
 
   function showError(msg) {
@@ -475,7 +519,7 @@
 
   function hideError() { document.getElementById('error-msg').style.display = 'none'; }
 
-  document.addEventListener('keydown', e => { if (e.key === 'Enter') runQuery(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && !document.getElementById('btn-run').disabled) runQuery(); });
 
   /* Column resize logic */
   (function() {
